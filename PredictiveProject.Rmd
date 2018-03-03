@@ -1,0 +1,146 @@
+---
+title: "PredictProject"
+author: "Joel"
+date: "February 5, 2018"
+output: 
+  html_document: 
+    keep_md: yes
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Summary
+
+First Installed all necessary packages and set the working directory, libraries and seed for line numbers. 
+Second downloaded both training and test files into working directory, then took training file and split into 2 files
+subtraining and subtesting. Now I can build my model using subtraining data and predict with subtesting data, then 
+do the same with another model. Once two models built and predicted. select the best of 2 and apply to original test 
+data. The data for this project come from this source: <http://web.archive.org/web/20161224072740/http:/groupware.les.inf.puc-rio.br/har>
+
+### Installed the necessary packages, and set libraries and seed.
+
+```{r, warning=FALSE, error=FALSE}
+library(caret);
+library(ggplot2); 
+library(randomForest);
+library(rpart);
+library(rpart.plot);
+library(rattle);
+
+getwd();
+
+set.seed(12234);
+```
+
+
+### Read Training and Test Data with some cleaning 
+```{r, echo=FALSE}
+training <- read.csv("https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv", na.strings=c("NA","#DIV/0!",""))
+testing <- read.csv("https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv", na.strings=c("NA","#DIV/0!",""))
+```
+
+
+### Checked the column names and some basic numbers
+```{r eval=FALSE}
+head(training); summary(training); dim(training); names(training)
+head(testing); summary(testing); dim(testing); names(testing)
+```
+
+
+### Clean up some data and fields
+```{r eval=FALSE}
+## Remove columns with string "name", "timestamp", "window", "X"
+Cl <- grep("name|timestamp|window|X", colnames(training1), value=F) 
+trainingCl <- training1[,-Cl]
+
+# (OR)
+```
+
+```{r}
+# Remove unwanted fields, first 7 fields
+training   <-training[,-c(1:7)]
+testing <-testing[,-c(1:7)]
+
+#Remove columns with over 95% missing data, exclude them from the file
+training[training==""] <- NA
+NAtoRM <- apply(training, 2, function(x) sum(is.na(x)))/nrow(training)
+training <- training[!(NAtoRM>0.95)]
+
+testing[testing==""] <- NA
+NAtoRM2 <- apply(testing, 2, function(x) sum(is.na(x)))/nrow(testing)
+testing <- testing[!(NAtoRM2>0.95)]
+
+# Making sure the column names that I want available
+head(training); summary(training); dim(training); names(training)
+head(testing); summary(testing); dim(testing); names(testing)
+```
+
+
+### Cross validation by Spliting the training data into subtraining and subtesting
+```{r}
+inTrain <- createDataPartition(y=training$classe, p=0.7, list= FALSE)
+subtraining <- training[inTrain,]; 
+subtesting <- training[-inTrain,]
+summary(subtraining); summary(subtesting)
+```
+
+### Did some Exploratory Analysis, Frequency of Classe variable
+```{r, echo=FALSE}
+plot(subtraining$classe, col="blue", main="", xlab="Classe Levels", ylab="Frequency")
+```
+
+
+### Prediction with Machine learning algorithm - Decision Tree: Outcome variable as 'classe' with all the variables
+
+
+### Viewed with fancy
+```{r, echo=FALSE}
+Fit1 <- rpart(classe ~.,data=subtraining, method="class")
+Fit1
+fancyRpartPlot(Fit1)
+```
+
+### confusionMatrix
+```{r, echo=FALSE}
+Prediction1 <- predict(Fit1, subtesting, type="class")
+confusionMatrix(Prediction1, subtesting$classe)
+```
+
+
+### Prediction with Machine Learning algorith - Random Forest: Outcome variable as 'classe' with all the variables
+
+```{r, echo=FALSE}
+Fit2 <- randomForest(classe ~., data=subtraining, method = "class")
+Fit2
+
+prediction2 <- predict(Fit2, subtesting, type = "class")
+
+confusionMatrix(prediction2, subtesting$classe)
+```
+
+### Comparing the above 2 models, Decision Tree(.728) and Random Forest(.995), the Random Forest performed much better accuracy, so select for applying to original test. The Out of sample error is .5 calculated 1-accuracy.
+
+### Finally, we apply to Original Test data given: Out-of-sample error. By comparing the above two models, Decision tree and Random forest, seems the latter yielded better results
+
+### Following Function generates 20 files with predictions
+```{r}
+Finalprediction <- predict(Fit2, testing, type = "class")
+```
+
+#### # 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16 17, 18, 19, 20 
+#### # B, A, B, A, A, E, D, B, A,  A,  B,  C,  B,  A,  E,  E, A,  B,  B, B
+
+
+```{r}
+pml_write_files = function(x){
+  n = length(x)
+  for(i in 1:n){
+    filename = paste0("problem_id_",i,".txt")
+    write.table(x[i],file=filename,quote=FALSE,row.names=FALSE,col.names=FALSE)
+  }
+}
+
+pml_write_files(Finalprediction)
+```
